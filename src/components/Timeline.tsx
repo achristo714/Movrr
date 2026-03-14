@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, useMemo } from 'react';
+import { useRef, useState, useCallback, useMemo, useEffect } from 'react';
 import type { Task } from '../types';
 import { CATEGORY_COLORS } from '../types';
 import {
@@ -10,6 +10,8 @@ import {
   isSameMonth,
   differenceInDays,
   addDays,
+  startOfWeek,
+  eachDayOfInterval,
 } from '../utils';
 
 interface TimelineProps {
@@ -21,11 +23,206 @@ interface TimelineProps {
   onAddTaskAtDate: (date: string) => void;
 }
 
-const DAY_WIDTH = 44;
-const ROW_HEIGHT = 42;
-const HEADER_HEIGHT = 72;
+const DAY_WIDTH = 48;
+const ROW_HEIGHT = 44;
+const HEADER_HEIGHT = 76;
 
-export function Timeline({
+// Mobile calendar view component
+function MobileCalendar({
+  tasks,
+  moveOutDate,
+  moveInDate,
+  onTaskClick,
+  onUpdateTask,
+  onAddTaskAtDate,
+}: TimelineProps) {
+  const today = new Date();
+  const [selectedDate, setSelectedDate] = useState(format(today, 'yyyy-MM-dd'));
+  const [currentMonth, setCurrentMonth] = useState(today);
+
+  const monthStart = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+  const calStart = startOfWeek(monthStart, { weekStartsOn: 0 });
+  const calEnd = new Date(calStart);
+  calEnd.setDate(calStart.getDate() + 41); // 6 weeks
+
+  const calDays = eachDayOfInterval({ start: calStart, end: calEnd });
+
+  const moveOutStr = moveOutDate;
+  const moveInStr = moveInDate;
+
+  const tasksForDate = (dateStr: string) =>
+    tasks.filter(t => t.startDate <= dateStr && t.endDate >= dateStr);
+
+  const selectedTasks = tasksForDate(selectedDate);
+
+  const prevMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
+  const nextMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Month navigation */}
+      <div className="bg-white rounded-2xl border border-warm-100 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3">
+          <button onClick={prevMonth} className="w-8 h-8 rounded-xl bg-warm-50 flex items-center justify-center text-warm-500 hover:bg-warm-100 active:scale-95 transition-all">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 4L6 8l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+          <h3 className="font-display text-base font-semibold text-warm-700">
+            {format(currentMonth, 'MMMM yyyy')}
+          </h3>
+          <button onClick={nextMonth} className="w-8 h-8 rounded-xl bg-warm-50 flex items-center justify-center text-warm-500 hover:bg-warm-100 active:scale-95 transition-all">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+        </div>
+
+        {/* Day names */}
+        <div className="grid grid-cols-7 px-2">
+          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+            <div key={d} className="text-center text-[10px] font-medium text-warm-400 uppercase tracking-wider py-1">
+              {d}
+            </div>
+          ))}
+        </div>
+
+        {/* Calendar grid */}
+        <div className="grid grid-cols-7 gap-px bg-warm-100/50 mx-2 mb-2 rounded-xl overflow-hidden">
+          {calDays.map((day, i) => {
+            const dateStr = format(day, 'yyyy-MM-dd');
+            const inMonth = day.getMonth() === currentMonth.getMonth();
+            const isSelected = dateStr === selectedDate;
+            const isTodayDate = isToday(day);
+            const isMoveOut = dateStr === moveOutStr;
+            const isMoveIn = dateStr === moveInStr;
+            const dayTasks = tasksForDate(dateStr);
+            const hasTask = dayTasks.length > 0;
+
+            return (
+              <button
+                key={i}
+                onClick={() => setSelectedDate(dateStr)}
+                className={`relative flex flex-col items-center justify-center py-2 transition-all ${
+                  isSelected
+                    ? 'bg-blush-400 text-white shadow-sm'
+                    : isTodayDate
+                    ? 'bg-blush-50 text-blush-600'
+                    : inMonth
+                    ? 'bg-white text-warm-700 hover:bg-warm-50 active:bg-warm-100'
+                    : 'bg-warm-50/50 text-warm-300'
+                }`}
+              >
+                <span className={`text-sm font-medium ${
+                  isSelected ? 'text-white' : isMoveOut ? 'text-blush-500 font-bold' : isMoveIn ? 'text-sage-500 font-bold' : ''
+                }`}>
+                  {day.getDate()}
+                </span>
+                {(isMoveOut || isMoveIn) && (
+                  <span className={`text-[7px] font-bold uppercase leading-none ${
+                    isSelected ? 'text-white/80' : isMoveOut ? 'text-blush-400' : 'text-sage-400'
+                  }`}>
+                    {isMoveOut ? 'OUT' : 'IN'}
+                  </span>
+                )}
+                {hasTask && !isSelected && (
+                  <div className="flex gap-0.5 mt-0.5">
+                    {dayTasks.slice(0, 3).map((t, j) => (
+                      <div
+                        key={j}
+                        className="w-1 h-1 rounded-full"
+                        style={{ backgroundColor: CATEGORY_COLORS[t.category] }}
+                      />
+                    ))}
+                  </div>
+                )}
+                {hasTask && isSelected && (
+                  <div className="w-1 h-1 rounded-full bg-white/80 mt-0.5" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Selected date tasks */}
+      <div className="bg-white rounded-2xl border border-warm-100 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-warm-50">
+          <div>
+            <h4 className="text-sm font-semibold text-warm-700">
+              {format(parseISO(selectedDate), 'EEEE, MMM d')}
+            </h4>
+            <p className="text-[11px] text-warm-400">
+              {selectedTasks.length === 0 ? 'No tasks' : `${selectedTasks.length} task${selectedTasks.length > 1 ? 's' : ''}`}
+            </p>
+          </div>
+          <button
+            onClick={() => onAddTaskAtDate(selectedDate)}
+            className="w-8 h-8 rounded-xl bg-gradient-to-br from-blush-400 to-lavender-400 text-white flex items-center justify-center shadow-sm hover:shadow-md active:scale-95 transition-all"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+          </button>
+        </div>
+
+        {selectedTasks.length === 0 ? (
+          <button
+            onClick={() => onAddTaskAtDate(selectedDate)}
+            className="w-full py-8 flex flex-col items-center gap-2 text-warm-300 hover:text-warm-400 hover:bg-warm-50/50 transition-colors"
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="text-warm-300">
+              <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+            <span className="text-xs">Tap to add a task</span>
+          </button>
+        ) : (
+          <div className="divide-y divide-warm-50">
+            {selectedTasks.map(task => {
+              const color = CATEGORY_COLORS[task.category];
+              return (
+                <div
+                  key={task.id}
+                  className="flex items-center gap-3 px-4 py-3 active:bg-warm-50 transition-colors"
+                  onClick={() => onTaskClick(task)}
+                >
+                  <button
+                    className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all ${
+                      task.completed ? 'bg-sage-300 border-sage-400 scale-95' : 'hover:scale-110'
+                    }`}
+                    style={{ borderColor: task.completed ? undefined : color }}
+                    onClick={e => {
+                      e.stopPropagation();
+                      onUpdateTask(task.id, { completed: !task.completed });
+                    }}
+                  >
+                    {task.completed && (
+                      <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                        <path d="M2 6L5 9L10 3" stroke="white" strokeWidth="2" strokeLinecap="round" />
+                      </svg>
+                    )}
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium truncate ${task.completed ? 'line-through text-warm-400' : 'text-warm-700'}`}>
+                      {task.title}
+                    </p>
+                    <p className="text-[11px] text-warm-400">
+                      {format(parseISO(task.startDate), 'MMM d')}
+                      {task.startDate !== task.endDate && ` — ${format(parseISO(task.endDate), 'MMM d')}`}
+                    </p>
+                  </div>
+                  <div
+                    className="w-2 h-8 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: color + '66' }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Desktop Gantt timeline
+function DesktopTimeline({
   tasks,
   moveOutDate,
   moveInDate,
@@ -50,14 +247,22 @@ export function Timeline({
   const moveOutCol = dateToCol(parseISO(moveOutDate), timelineStart);
   const moveInCol = dateToCol(parseISO(moveInDate), timelineStart);
 
-  // Group tasks into non-overlapping rows
+  // Scroll to today on mount
+  useEffect(() => {
+    if (scrollRef.current) {
+      const todayIdx = days.findIndex(d => isToday(d));
+      if (todayIdx >= 0) {
+        const scrollTo = Math.max(0, todayIdx * DAY_WIDTH - scrollRef.current.clientWidth / 3);
+        scrollRef.current.scrollLeft = scrollTo;
+      }
+    }
+  }, [days]);
+
   const taskRows = useMemo(() => {
     const sorted = [...tasks].sort((a, b) => a.startDate.localeCompare(b.startDate));
     const rows: Task[][] = [];
-
     for (const task of sorted) {
       const taskStart = dateToCol(parseISO(task.startDate), timelineStart);
-
       let placed = false;
       for (const row of rows) {
         const lastInRow = row[row.length - 1];
@@ -76,7 +281,6 @@ export function Timeline({
   const totalWidth = days.length * DAY_WIDTH;
   const totalHeight = HEADER_HEIGHT + Math.max(taskRows.length, 3) * ROW_HEIGHT + 60;
 
-  // Drag handlers
   const handlePointerDown = useCallback(
     (e: React.PointerEvent, task: Task, mode: 'move' | 'resize-start' | 'resize-end') => {
       e.stopPropagation();
@@ -136,7 +340,6 @@ export function Timeline({
     setDragState(null);
   }, []);
 
-  // Months for header
   const months = useMemo(() => {
     const result: { name: string; startCol: number; span: number }[] = [];
     let current = '';
@@ -153,22 +356,22 @@ export function Timeline({
   }, [days]);
 
   return (
-    <div className="flex-1 overflow-hidden border border-warm-200 rounded-2xl bg-white shadow-sm">
+    <div className="flex-1 overflow-hidden border border-warm-100 rounded-2xl bg-white shadow-sm">
       <div
         ref={scrollRef}
-        className="overflow-auto"
-        style={{ maxHeight: 'calc(100dvh - 220px)' }}
+        className="overflow-auto scroll-smooth"
+        style={{ maxHeight: 'calc(100dvh - 200px)' }}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
       >
         <div style={{ width: totalWidth, minHeight: totalHeight }} className="relative">
           {/* Month headers */}
-          <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-sm border-b border-warm-100">
+          <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-md border-b border-warm-100">
             <div className="flex" style={{ height: 32 }}>
               {months.map(m => (
                 <div
                   key={m.name}
-                  className="text-xs font-medium text-warm-500 flex items-center px-2 border-r border-warm-100"
+                  className="text-[11px] font-semibold text-warm-500 flex items-center px-3 border-r border-warm-50"
                   style={{ width: m.span * DAY_WIDTH }}
                 >
                   {m.name}
@@ -186,20 +389,20 @@ export function Timeline({
                 return (
                   <div
                     key={i}
-                    className={`flex flex-col items-center justify-center border-r border-warm-100 cursor-pointer transition-colors hover:bg-blush-50 ${
-                      today ? 'bg-blush-50' : isWeekend ? 'bg-warm-50/50' : ''
+                    className={`flex flex-col items-center justify-center border-r border-warm-50 cursor-pointer transition-colors hover:bg-blush-50/80 ${
+                      today ? 'bg-blush-50/60' : isWeekend ? 'bg-warm-50/30' : ''
                     }`}
                     style={{ width: DAY_WIDTH }}
                     onClick={() => onAddTaskAtDate(format(day, 'yyyy-MM-dd'))}
                   >
-                    <span className={`text-[10px] uppercase ${
-                      today ? 'text-blush-500 font-semibold' : 'text-warm-400'
+                    <span className={`text-[10px] uppercase tracking-wide ${
+                      today ? 'text-blush-500 font-bold' : 'text-warm-400 font-medium'
                     }`}>
                       {format(day, 'EEE')}
                     </span>
-                    <span className={`text-xs font-medium ${
+                    <span className={`text-xs font-medium leading-none ${
                       today
-                        ? 'bg-blush-400 text-white w-5 h-5 rounded-full flex items-center justify-center'
+                        ? 'bg-blush-400 text-white w-6 h-6 rounded-full flex items-center justify-center'
                         : isMoveOut
                         ? 'text-blush-500 font-bold'
                         : isMoveIn
@@ -211,7 +414,7 @@ export function Timeline({
                       {format(day, 'd')}
                     </span>
                     {(isMoveOut || isMoveIn) && (
-                      <span className={`text-[8px] font-bold uppercase ${
+                      <span className={`text-[7px] font-bold uppercase leading-none ${
                         isMoveOut ? 'text-blush-400' : 'text-sage-400'
                       }`}>
                         {isMoveOut ? 'OUT' : 'IN'}
@@ -236,14 +439,14 @@ export function Timeline({
                   key={i}
                   className={`absolute top-0 bottom-0 border-r ${
                     isMoveOut
-                      ? 'border-blush-300 bg-blush-50/30'
+                      ? 'border-blush-200/80 bg-blush-50/20'
                       : isMoveIn
-                      ? 'border-sage-300 bg-sage-50/30'
+                      ? 'border-sage-200/80 bg-sage-50/20'
                       : today
-                      ? 'border-blush-200 bg-blush-50/20'
+                      ? 'border-blush-100/80 bg-blush-50/10'
                       : isWeekend
-                      ? 'border-warm-100 bg-warm-50/30'
-                      : 'border-warm-100/50'
+                      ? 'border-warm-100/50 bg-warm-50/20'
+                      : 'border-warm-50'
                   }`}
                   style={{
                     left: i * DAY_WIDTH,
@@ -258,7 +461,7 @@ export function Timeline({
             {/* Today marker line */}
             {days.some(d => isToday(d)) && (
               <div
-                className="absolute top-0 w-0.5 bg-blush-400 z-10"
+                className="absolute top-0 w-0.5 bg-blush-400/80 z-10 rounded-full"
                 style={{
                   left: days.findIndex(d => isToday(d)) * DAY_WIDTH + DAY_WIDTH / 2,
                   height: totalHeight - HEADER_HEIGHT,
@@ -281,29 +484,29 @@ export function Timeline({
                   <div
                     key={task.id}
                     className={`absolute flex items-center group cursor-grab active:cursor-grabbing ${
-                      isDragging ? 'z-30 scale-[1.02] shadow-lg' : 'z-10 hover:z-20'
-                    } transition-shadow`}
+                      isDragging ? 'z-30 scale-[1.03] shadow-lg' : 'z-10 hover:z-20'
+                    } transition-all duration-150`}
                     style={{
-                      left: startCol * DAY_WIDTH + 2,
+                      left: startCol * DAY_WIDTH + 3,
                       top: rowIdx * ROW_HEIGHT + 6,
-                      width: span * DAY_WIDTH - 4,
+                      width: span * DAY_WIDTH - 6,
                       height: ROW_HEIGHT - 12,
                     }}
                   >
                     {/* Resize handle - start */}
                     <div
-                      className="absolute left-0 top-0 bottom-0 w-2 cursor-col-resize z-10 hover:bg-white/30 rounded-l-lg"
+                      className="absolute left-0 top-0 bottom-0 w-2.5 cursor-col-resize z-10 hover:bg-white/30 rounded-l-lg"
                       onPointerDown={e => handlePointerDown(e, task, 'resize-start')}
                     />
 
                     {/* Task bar */}
                     <div
-                      className={`w-full h-full rounded-lg border flex items-center px-2 gap-1.5 transition-all ${
-                        task.completed ? 'opacity-50' : ''
-                      } hover:shadow-md`}
+                      className={`w-full h-full rounded-lg border flex items-center px-2.5 gap-1.5 transition-all ${
+                        task.completed ? 'opacity-40' : ''
+                      } hover:shadow-md hover:brightness-[1.02]`}
                       style={{
-                        backgroundColor: color + '33',
-                        borderColor: color + '88',
+                        backgroundColor: color + '30',
+                        borderColor: color + '60',
                       }}
                       onPointerDown={e => handlePointerDown(e, task, 'move')}
                       onClick={e => {
@@ -313,14 +516,13 @@ export function Timeline({
                         }
                       }}
                     >
-                      {/* Completed checkbox */}
                       <button
-                        className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+                        className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all ${
                           task.completed
                             ? 'bg-sage-300 border-sage-400 text-white'
-                            : 'border-warm-300 hover:border-blush-400'
+                            : 'border-current hover:scale-110'
                         }`}
-                        style={{ borderColor: task.completed ? undefined : color }}
+                        style={{ borderColor: task.completed ? undefined : color, color }}
                         onClick={e => {
                           e.stopPropagation();
                           onUpdateTask(task.id, { completed: !task.completed });
@@ -334,7 +536,6 @@ export function Timeline({
                         )}
                       </button>
 
-                      {/* Title */}
                       <span
                         className={`text-xs font-medium truncate ${
                           task.completed ? 'line-through text-warm-400' : 'text-warm-700'
@@ -343,7 +544,6 @@ export function Timeline({
                         {task.title}
                       </span>
 
-                      {/* Assignee badge */}
                       {task.assignee && span >= 3 && (
                         <span className="ml-auto text-[10px] text-warm-400 flex-shrink-0">
                           {task.assignee === 'me' ? '👤' : task.assignee === 'partner' ? '💕' : '👫'}
@@ -353,7 +553,7 @@ export function Timeline({
 
                     {/* Resize handle - end */}
                     <div
-                      className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize z-10 hover:bg-white/30 rounded-r-lg"
+                      className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize z-10 hover:bg-white/30 rounded-r-lg"
                       onPointerDown={e => handlePointerDown(e, task, 'resize-end')}
                     />
                   </div>
@@ -369,7 +569,7 @@ export function Timeline({
                 <div className="text-4xl mb-3">📦</div>
                 <p className="font-display text-lg text-warm-500 mb-1">No tasks yet</p>
                 <p className="text-sm text-warm-400">
-                  Click any date on the timeline or use the + button to add your first moving task
+                  Click any date to add your first moving task
                 </p>
               </div>
             </div>
@@ -378,4 +578,16 @@ export function Timeline({
       </div>
     </div>
   );
+}
+
+export function Timeline(props: TimelineProps) {
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 640);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  return isMobile ? <MobileCalendar {...props} /> : <DesktopTimeline {...props} />;
 }

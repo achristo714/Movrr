@@ -57,12 +57,20 @@
 html {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
   background: var(--color-cream-50);
   color: var(--color-warm-700);
   min-height: 100dvh;
+}
+
+/* Smooth scrolling */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
 }
 
 /* Custom scrollbar */
@@ -74,11 +82,29 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-warm-300);
+  background: var(--color-warm-200);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-warm-400);
+  background: var(--color-warm-300);
+}
+
+/* Touch improvements */
+@media (hover: none) {
+  ::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Active states for touch */
+button, [role="button"] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Date input styling */
+input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .dragging {
