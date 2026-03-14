@@ -63,7 +63,7 @@ export function TaskModal({ task, initialStartDate, onSave, onUpdate, onDelete, 
         className="relative bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90vh] overflow-y-auto shadow-xl"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-warm-100">
+        <div className="flex items-center justify-between p-6 pb-4 border-b border-warm-100">
           <h2 className="font-display text-lg font-semibold text-warm-800">
             {isEditing ? 'Edit Task' : 'New Task'}
           </h2>
@@ -76,7 +76,7 @@ export function TaskModal({ task, initialStartDate, onSave, onUpdate, onDelete, 
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-6 space-y-5">
           {/* Title */}
           <div>
             <label className="block text-xs font-medium text-warm-500 uppercase tracking-wide mb-1.5">
@@ -185,7 +185,7 @@ export function TaskModal({ task, initialStartDate, onSave, onUpdate, onDelete, 
         </div>
 
         {/* Footer */}
-        <div className="p-5 border-t border-warm-100 flex gap-3">
+        <div className="p-6 border-t border-warm-100 flex gap-3">
           {isEditing && (
             <button
               type="button"
